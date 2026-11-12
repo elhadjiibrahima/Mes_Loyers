@@ -5,7 +5,7 @@ import { View } from 'react-native';
 
 import { Badge, Button, Card, Empty, Row, Screen, T } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
-import { getProfil, situationDuMois, type LigneMois } from '@/db/queries';
+import { ficheSolde, getLocataire, getProfil, situationDuMois, type LigneMois } from '@/db/queries';
 import { useTheme } from '@/hooks/use-theme';
 import { relancerWhatsApp } from '@/lib/actions';
 import { decalerMois, formatGNF, libelleMois, moisCourant } from '@/lib/format';
@@ -21,19 +21,31 @@ export default function Tableau() {
   const c = useTheme();
   const [mois, setMois] = useState(moisCourant());
   const [lignes, setLignes] = useState<LigneMois[]>([]);
-  const [proprio, setProprio] = useState('');
 
   useFocusEffect(
     useCallback(() => {
       situationDuMois(db, mois).then(setLignes);
-      getProfil(db).then((p) => setProprio(p.nom));
     }, [db, mois]),
   );
 
   const attendu = lignes.reduce((s, l) => s + l.du, 0);
-  const encaisse = lignes.reduce((s, l) => s + Math.min(l.paye, l.du || l.paye), 0);
+  const encaisse = lignes.reduce((s, l) => s + Math.min(l.paye, l.du), 0);
   const reste = Math.max(attendu - encaisse, 0);
+  const arrieres = lignes.reduce((s, l) => s + l.arrieresAvant, 0);
   const taux = attendu > 0 ? Math.round((encaisse / attendu) * 100) : 0;
+
+  const relancer = async (l: LigneMois) => {
+    const loc = await getLocataire(db, l.locataire_id);
+    if (!loc) return;
+    const solde = await ficheSolde(db, loc, mois);
+    relancerWhatsApp({
+      telephone: l.telephone,
+      nom: l.nom,
+      mois: solde.moisImpayes.map((m) => m.mois),
+      reste: solde.arrieres,
+      proprietaire: (await getProfil(db)).nom,
+    });
+  };
 
   return (
     <Screen tabs>
@@ -55,49 +67,43 @@ export default function Tableau() {
           <T variant="small">Attendu : {formatGNF(attendu)}</T>
           <T variant="small" color={reste > 0 ? c.danger : c.success}>Reste : {formatGNF(reste)}</T>
         </Row>
+        {arrieres > 0 && (
+          <T variant="small" color={c.danger}>+ {formatGNF(arrieres)} d'arriérés des mois précédents</T>
+        )}
       </Card>
 
       {lignes.length === 0 ? (
         <Empty
-          title="Aucun locataire actif"
+          title="Aucun locataire ce mois-ci"
           text="Ajoutez un logement puis un locataire pour suivre vos loyers."
           action={<Button title="Ajouter un logement" onPress={() => router.push('/logement/nouveau')} />}
         />
       ) : (
         lignes.map((l) => {
-          const resteLigne = Math.max(l.du - l.paye, 0);
+          const enRetard = l.statut !== 'paye' || l.arrieresAvant > 0;
           return (
             <Card key={l.locataire_id} onPress={() => router.push(`/locataire/${l.locataire_id}`)}>
               <Row>
                 <View style={{ flex: 1 }}>
                   <T variant="subtitle">{l.nom}</T>
-                  <T variant="small">{l.logement_nom ?? 'Sans logement'}</T>
+                  <T variant="small">{l.logement_nom ?? 'Logement supprimé'}</T>
                 </View>
                 <Badge label={STATUT[l.statut].label} tone={STATUT[l.statut].tone} />
               </Row>
               <T variant="small">
                 {formatGNF(l.paye)} / {formatGNF(l.du)}
               </T>
-              {l.statut !== 'paye' && (
+              {l.arrieresAvant > 0 && (
+                <T variant="small" color={c.danger}>Arriérés précédents : {formatGNF(l.arrieresAvant)}</T>
+              )}
+              {enRetard && (
                 <Row style={{ justifyContent: 'flex-start' }}>
                   <Button
                     small
                     title="Encaisser"
-                    onPress={() =>
-                      router.push({
-                        pathname: '/paiement/nouveau',
-                        params: { locataire: l.locataire_id, mois, montant: resteLigne },
-                      })
-                    }
+                    onPress={() => router.push({ pathname: '/paiement/nouveau', params: { locataire: l.locataire_id, mois } })}
                   />
-                  <Button
-                    small
-                    variant="secondary"
-                    title="Relancer WhatsApp"
-                    onPress={() =>
-                      relancerWhatsApp({ telephone: l.telephone, nom: l.nom, mois, reste: resteLigne, proprietaire: proprio })
-                    }
-                  />
+                  <Button small variant="secondary" title="Relancer WhatsApp" onPress={() => relancer(l)} />
                 </Row>
               )}
             </Card>

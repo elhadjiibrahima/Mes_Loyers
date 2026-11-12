@@ -1,34 +1,22 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { Alert, View } from 'react-native';
+import { View } from 'react-native';
 
 import { Badge, Button, Card, Empty, Row, Screen, T } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
-import { deleteLogement, listLogements, type Logement } from '@/db/queries';
+import { listLogements, type Logement } from '@/db/queries';
 import { formatGNF } from '@/lib/format';
 
 export default function Logements() {
   const db = useSQLiteContext();
   const [logements, setLogements] = useState<Logement[]>([]);
 
-  const charger = useCallback(() => {
-    listLogements(db).then(setLogements);
-  }, [db]);
-  useFocusEffect(charger);
-
-  const supprimer = (l: Logement) =>
-    Alert.alert('Supprimer ce logement ?', l.nom, [
-      { text: 'Annuler', style: 'cancel' },
-      {
-        text: 'Supprimer',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteLogement(db, l.id);
-          charger();
-        },
-      },
-    ]);
+  useFocusEffect(
+    useCallback(() => {
+      listLogements(db).then(setLogements);
+    }, [db]),
+  );
 
   return (
     <Screen tabs>
@@ -41,7 +29,7 @@ export default function Logements() {
         <Empty title="Aucun logement" text="Ajoutez vos appartements, chambres, magasins ou maisons." />
       ) : (
         logements.map((l) => (
-          <Card key={l.id} onPress={() => supprimer(l)}>
+          <Card key={l.id} onPress={() => router.push(`/logement/${l.id}`)}>
             <Row>
               <View style={{ flex: 1 }}>
                 <T variant="subtitle">{l.nom}</T>
@@ -55,7 +43,6 @@ export default function Logements() {
           </Card>
         ))
       )}
-      {logements.length > 0 && <T variant="small">Appuyez sur un logement pour le supprimer.</T>}
     </Screen>
   );
 }

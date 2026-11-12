@@ -1,10 +1,10 @@
-import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
 import { Alert } from 'react-native';
 
 import { Button, Field, Screen } from '@/components/ui';
 import { addLogement } from '@/db/queries';
+import { fermer } from '@/lib/actions';
 import { parseMontant } from '@/lib/format';
 
 export default function NouveauLogement() {
@@ -20,7 +20,7 @@ export default function NouveauLogement() {
       return;
     }
     await addLogement(db, { nom: nom.trim(), adresse: adresse.trim(), loyer: montant });
-    router.back();
+    fermer();
   };
 
   return (
