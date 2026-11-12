@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 
 /** Crée ou met à jour le schéma de la base locale (mode hors ligne). */
 export async function migrateDb(db: SQLiteDatabase) {
@@ -8,11 +8,10 @@ export async function migrateDb(db: SQLiteDatabase) {
   let version = row?.user_version ?? 0;
   if (version >= DATABASE_VERSION) return;
 
+  await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+
   if (version === 0) {
     await db.execAsync(`
-      PRAGMA journal_mode = WAL;
-      PRAGMA foreign_keys = ON;
-
       CREATE TABLE IF NOT EXISTS logements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nom TEXT NOT NULL,
@@ -48,6 +47,27 @@ export async function migrateDb(db: SQLiteDatabase) {
       );
     `);
     version = 1;
+  }
+
+  if (version === 1) {
+    // v2 : le loyer est rattaché au locataire (contrat), dates de début de loyer
+    // et de sortie, caution, et regroupement des paiements multi-mois (lot).
+    await db.withTransactionAsync(async () => {
+      await db.execAsync(`
+        ALTER TABLE locataires ADD COLUMN loyer INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE locataires ADD COLUMN debut_loyer TEXT;
+        ALTER TABLE locataires ADD COLUMN date_sortie TEXT;
+        ALTER TABLE locataires ADD COLUMN caution INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE locataires ADD COLUMN caution_rendue INTEGER;
+        ALTER TABLE paiements ADD COLUMN lot TEXT;
+
+        UPDATE locataires SET loyer = COALESCE((SELECT l.loyer FROM logements l WHERE l.id = locataires.logement_id), 0);
+        UPDATE locataires SET debut_loyer = substr(date_entree, 1, 7);
+        UPDATE locataires SET date_sortie = date('now') WHERE actif = 0;
+        CREATE INDEX IF NOT EXISTS idx_paiements_locataire ON paiements(locataire_id, mois);
+      `);
+    });
+    version = 2;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);
