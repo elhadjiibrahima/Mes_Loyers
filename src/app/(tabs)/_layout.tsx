@@ -13,8 +13,8 @@ export default function TabsLayout() {
       indicatorColor={colors.backgroundSelected}
       labelStyle={{ selected: { color: colors.primary } }}>
       <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>Loyers</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="banknote" md="payments" />
+        <NativeTabs.Trigger.Label>Accueil</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="house" md="home" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="logements">
         <NativeTabs.Trigger.Label>Logements</NativeTabs.Trigger.Label>

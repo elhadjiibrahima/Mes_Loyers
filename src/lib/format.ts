@@ -10,6 +10,37 @@ export function formatGNF(montant: number) {
   return `${s} GNF`;
 }
 
+/** Montant court : 7 500 000 -> "7,5 M", 200 000 -> "200 000". */
+export function formatCourt(montant: number) {
+  if (montant >= 1_000_000) {
+    const m = Math.round(montant / 100_000) / 10;
+    return `${m.toString().replace('.', ',')} M`;
+  }
+  return Math.round(montant).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u202F');
+}
+
+/** 1500000 -> "1 500 000" (sans devise). */
+export function formatNombre(montant: number) {
+  return Math.round(montant).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u202F');
+}
+
+/** Premier mot d'un nom complet. */
+export function prenom(nom: string) {
+  return nom.trim().split(/\s+/)[0] ?? nom;
+}
+
+/** Nombre de jours entre une date AAAA-MM-JJ et aujourd'hui. */
+export function joursDepuis(date: string) {
+  const [a, m, j] = date.split('-').map(Number);
+  const d = new Date(a, m - 1, j);
+  return Math.max(Math.floor((Date.now() - d.getTime()) / 86_400_000), 0);
+}
+
+/** "Bonjour" ou "Bonsoir" selon l'heure. */
+export function salutation(d = new Date()) {
+  return d.getHours() >= 18 || d.getHours() < 4 ? 'Bonsoir' : 'Bonjour';
+}
+
 /** Garde uniquement les chiffres d'une saisie ("1 500 000" -> 1500000). */
 export function parseMontant(texte: string) {
   const n = parseInt(texte.replace(/\D/g, ''), 10);

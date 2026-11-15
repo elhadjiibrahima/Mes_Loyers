@@ -9,6 +9,10 @@ export type Logement = {
   loyer: number;
   locataire_id: number | null;
   locataire_nom: string | null;
+  /** Loyer payé par le locataire actuel (peut différer du loyer affiché du logement). */
+  locataire_loyer: number | null;
+  /** Date de sortie du dernier locataire, si le logement est libre. */
+  libre_depuis: string | null;
 };
 
 export type Locataire = {
@@ -53,23 +57,20 @@ export type StatutLoyer = 'paye' | 'partiel' | 'impaye';
 
 // ---------- Logements ----------
 
+const SELECT_LOGEMENT = `
+  SELECT l.*, t.id AS locataire_id, t.nom AS locataire_nom, t.loyer AS locataire_loyer,
+         CASE WHEN t.id IS NULL
+              THEN (SELECT MAX(x.date_sortie) FROM locataires x WHERE x.logement_id = l.id)
+         END AS libre_depuis
+  FROM logements l
+  LEFT JOIN locataires t ON t.logement_id = l.id AND t.date_sortie IS NULL`;
+
 export function listLogements(db: SQLiteDatabase) {
-  return db.getAllAsync<Logement>(`
-    SELECT l.*, t.id AS locataire_id, t.nom AS locataire_nom
-    FROM logements l
-    LEFT JOIN locataires t ON t.logement_id = l.id AND t.date_sortie IS NULL
-    GROUP BY l.id
-    ORDER BY l.nom COLLATE NOCASE`);
+  return db.getAllAsync<Logement>(`${SELECT_LOGEMENT} GROUP BY l.id ORDER BY l.nom COLLATE NOCASE`);
 }
 
 export function getLogement(db: SQLiteDatabase, id: number) {
-  return db.getFirstAsync<Logement>(
-    `SELECT l.*, t.id AS locataire_id, t.nom AS locataire_nom
-     FROM logements l
-     LEFT JOIN locataires t ON t.logement_id = l.id AND t.date_sortie IS NULL
-     WHERE l.id = ? GROUP BY l.id`,
-    id,
-  );
+  return db.getFirstAsync<Logement>(`${SELECT_LOGEMENT} WHERE l.id = ? GROUP BY l.id`, id);
 }
 
 export function addLogement(db: SQLiteDatabase, data: { nom: string; adresse: string; loyer: number }) {
@@ -225,7 +226,7 @@ export async function deletePaiementLot(db: SQLiteDatabase, paiement: Paiement) 
 }
 
 /** Total déjà payé par mois pour un locataire. */
-async function payeParMois(db: SQLiteDatabase, locataireId: number) {
+export async function payeParMois(db: SQLiteDatabase, locataireId: number) {
   const rows = await db.getAllAsync<{ mois: string; total: number }>(
     'SELECT mois, SUM(montant) AS total FROM paiements WHERE locataire_id = ? GROUP BY mois',
     locataireId,
@@ -389,6 +390,30 @@ export async function situationDuMois(db: SQLiteDatabase, mois: string): Promise
       arrieresAvant: avant.arrieres,
       premierImpaye: avant.moisImpayes[0]?.mois ?? (p < l.loyer ? mois : null),
     };
+  });
+}
+
+// ---------- Calendrier ----------
+
+export type EtatMois = 'hors' | 'paye' | 'partiel' | 'impaye' | 'futur';
+
+/** État de chacun des 12 mois d'une année pour un locataire. */
+export function calendrierAnnee(
+  loc: Pick<Locataire, 'loyer' | 'debut_loyer' | 'date_sortie'>,
+  paye: Map<string, number>,
+  annee: number,
+  reference = moisCourant(),
+): { mois: string; etat: EtatMois }[] {
+  const fin = loc.date_sortie ? loc.date_sortie.slice(0, 7) : null;
+  return Array.from({ length: 12 }, (_, i) => {
+    const mois = `${annee}-${String(i + 1).padStart(2, '0')}`;
+    const p = paye.get(mois) ?? 0;
+    let etat: EtatMois;
+    if (mois < loc.debut_loyer || (fin && mois > fin)) etat = 'hors';
+    else if (p >= loc.loyer && loc.loyer > 0) etat = 'paye';
+    else if (mois > reference) etat = p > 0 ? 'partiel' : 'futur';
+    else etat = p > 0 ? 'partiel' : 'impaye';
+    return { mois, etat };
   });
 }
 
