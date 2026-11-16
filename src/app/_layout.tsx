@@ -4,6 +4,7 @@ import { SQLiteProvider } from 'expo-sqlite';
 import { useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { Colors } from '@/constants/theme';
 import { migrateDb } from '@/db/schema';
 import { installerAlertWeb } from '@/lib/alert-web';
 
@@ -12,11 +13,20 @@ installerAlertWeb();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const c = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   return (
     <SQLiteProvider databaseName="loyers.db" onInit={migrateDb}>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <AnimatedSplashOverlay />
-        <Stack screenOptions={{ headerBackTitle: 'Retour' }}>
+        <Stack
+          screenOptions={{
+            headerBackTitle: 'Retour',
+            headerShadowVisible: false,
+            headerStyle: { backgroundColor: c.background },
+            headerTintColor: c.text,
+            headerTitleStyle: { fontWeight: '700' },
+            contentStyle: { backgroundColor: c.background },
+          }}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="logement/nouveau" options={{ title: 'Nouveau logement', presentation: 'modal' }} />
           <Stack.Screen name="logement/[id]" options={{ title: 'Logement' }} />
