@@ -4,6 +4,7 @@ import { SQLiteProvider, type SQLiteDatabase } from 'expo-sqlite';
 import { useCallback } from 'react';
 import { useColorScheme } from 'react-native';
 
+import { estAdmin } from '@/auth/admin';
 import { AuthProvider, useAuth } from '@/auth/contexte';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { Colors } from '@/constants/theme';
@@ -30,6 +31,7 @@ function Navigation() {
   const colorScheme = useColorScheme();
   const c = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const { pret, compte } = useAuth();
+  const admin = estAdmin(compte);
 
   // Chaque compte a sa propre base : à l'ouverture, on la met à jour et on
   // reprend le nom du compte dans le profil s'il est vide.
@@ -56,7 +58,11 @@ function Navigation() {
         headerTitleStyle: { fontWeight: '700' },
         contentStyle: { backgroundColor: c.background },
       }}>
-      <Stack.Protected guard={!!compte}>
+      <Stack.Protected guard={admin}>
+        <Stack.Screen name="admin/index" options={{ title: 'Administration' }} />
+        <Stack.Screen name="admin/[id]" options={{ title: 'Propriétaire' }} />
+      </Stack.Protected>
+      <Stack.Protected guard={!!compte && !admin}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="logement/nouveau" options={{ title: 'Nouveau logement', presentation: 'modal' }} />
         <Stack.Screen name="logement/[id]" options={{ title: 'Logement' }} />
