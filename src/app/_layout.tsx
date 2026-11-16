@@ -35,6 +35,7 @@ export default function RootLayout() {
           <Stack.Screen name="locataire/modifier" options={{ title: 'Modifier le locataire', presentation: 'modal' }} />
           <Stack.Screen name="locataire/depart" options={{ title: 'Départ du locataire', presentation: 'modal' }} />
           <Stack.Screen name="paiement/nouveau" options={{ title: 'Encaisser un loyer', presentation: 'modal' }} />
+          <Stack.Screen name="depense/nouveau" options={{ title: 'Nouvelle dépense', presentation: 'modal' }} />
         </Stack>
       </ThemeProvider>
     </SQLiteProvider>

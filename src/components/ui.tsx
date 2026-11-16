@@ -32,11 +32,14 @@ export function Screen({
   tabs = false,
   top,
   footer,
+  fab = false,
 }: {
   children: ReactNode;
   tabs?: boolean;
   top?: ReactNode;
   footer?: ReactNode;
+  /** Laisse la place du bouton « + » flottant sous le dernier élément. */
+  fab?: boolean;
 }) {
   const c = useTheme();
   const insets = useSafeAreaInsets();
@@ -51,7 +54,7 @@ export function Screen({
           style={{
             padding: Spacing.three,
             paddingTop: top ? 0 : Spacing.three + (tabs ? WebTabInset : 0),
-            paddingBottom: Spacing.five + (footer ? 0 : tabs ? BottomTabInset + insets.bottom : insets.bottom),
+            paddingBottom: Spacing.five + (fab ? 76 : 0) + (footer ? 0 : tabs ? BottomTabInset + insets.bottom : insets.bottom),
             gap: Spacing.three,
             width: '100%',
             maxWidth: MaxContentWidth,
@@ -342,6 +345,15 @@ export function Empty({ title, text, action, icon }: { title: string; text: stri
       </T>
       {action}
     </Card>
+  );
+}
+
+/** Écran affiché quand l'élément demandé n'existe plus (lien ancien, suppression). */
+export function Introuvable({ quoi }: { quoi: string }) {
+  return (
+    <Screen>
+      <Empty icon="search-outline" title={`${quoi} introuvable`} text="Il a peut-être été supprimé." />
+    </Screen>
   );
 }
 

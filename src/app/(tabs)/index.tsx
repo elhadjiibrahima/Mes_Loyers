@@ -1,4 +1,4 @@
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, type Href } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
@@ -10,7 +10,7 @@ import {
   Badge,
   Button,
   Card,
-  Empty,
+  Icon,
   IconButton,
   ProgressBar,
   Row,
@@ -21,12 +21,65 @@ import {
   type Tone,
 } from '@/components/ui';
 import { Spacing, WebTabInset } from '@/constants/theme';
-import { ficheSolde, getLocataire, getProfil, situationDuMois, type LigneMois } from '@/db/queries';
+import { ficheSolde, getLocataire, getProfil, listLogements, situationDuMois, type LigneMois } from '@/db/queries';
 import { useTheme } from '@/hooks/use-theme';
 import { relancerWhatsApp } from '@/lib/actions';
-import { decalerMois, formatCourt, formatGNF, formatNombre, libelleMois, moisCourant, salutation } from '@/lib/format';
+import {
+  decalerMois,
+  formatCourt,
+  formatDate,
+  formatGNF,
+  formatNombre,
+  libelleMois,
+  moisCourant,
+  salutation,
+} from '@/lib/format';
 
-const TONE: Record<LigneMois['statut'], Tone> = { paye: 'success', partiel: 'warning', impaye: 'danger' };
+const TONE: Record<LigneMois['statut'], Tone> = { paye: 'success', partiel: 'warning', impaye: 'danger', avenir: 'neutral' };
+
+/** Carte « Pour commencer » tant que l'appli n'est pas configurée. */
+function Demarrage({ profil, logements, locataires }: { profil: boolean; logements: boolean; locataires: boolean }) {
+  const c = useTheme();
+  const etapes: { fait: boolean; titre: string; detail: string; href: Href }[] = [
+    { fait: profil, titre: 'Votre nom', detail: 'Il signe les quittances et les relances', href: '/profil' },
+    { fait: logements, titre: 'Un premier logement', detail: 'Appartement, chambre, magasin…', href: '/logement/nouveau' },
+    { fait: locataires, titre: 'Un premier locataire', detail: 'Avec son loyer et son jour d’échéance', href: '/locataire/nouveau' },
+  ];
+  return (
+    <Card style={{ gap: 4 }}>
+      <T variant="subtitle">Pour commencer</T>
+      <T variant="small">Trois étapes et vos loyers sont suivis automatiquement.</T>
+      {etapes.map((e, i) => (
+        <Pressable
+          key={e.titre}
+          onPress={() => router.push(e.href)}
+          disabled={e.fait}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: e.fait }}
+          style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56 }, pressed && { opacity: 0.7 }]}>
+          <View
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 15,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: e.fait ? c.successBg : c.backgroundSelected,
+            }}>
+            {e.fait ? <Icon name="checkmark" size={18} color={c.success} /> : <T style={{ fontWeight: '800' }}>{String(i + 1)}</T>}
+          </View>
+          <View style={{ flex: 1 }}>
+            <T style={{ fontWeight: '700', textDecorationLine: e.fait ? 'line-through' : 'none' }} color={e.fait ? c.textSecondary : c.text}>
+              {e.titre}
+            </T>
+            <T variant="small">{e.detail}</T>
+          </View>
+          {!e.fait && <Icon name="chevron-forward" size={18} color={c.primary} />}
+        </Pressable>
+      ))}
+    </Card>
+  );
+}
 
 export default function Accueil() {
   const db = useSQLiteContext();
@@ -35,11 +88,17 @@ export default function Accueil() {
   const [mois, setMois] = useState(moisCourant());
   const [lignes, setLignes] = useState<LigneMois[]>([]);
   const [proprio, setProprio] = useState('');
+  const [nbLogements, setNbLogements] = useState(0);
+  const [aDesLocataires, setADesLocataires] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       situationDuMois(db, mois).then(setLignes);
       getProfil(db).then((p) => setProprio(p.nom));
+      listLogements(db).then((l) => {
+        setNbLogements(l.length);
+        setADesLocataires(l.some((x) => x.locataire_id));
+      });
     }, [db, mois]),
   );
 
@@ -49,16 +108,19 @@ export default function Accueil() {
   const taux = attendu > 0 ? Math.round((encaisse / attendu) * 100) : 0;
   const compte = (st: LigneMois['statut']) => lignes.filter((l) => l.statut === st).length;
 
+  const enRetard = (l: LigneMois) => l.statut === 'impaye' || l.statut === 'partiel' || l.arrieresAvant > 0;
   const aRelancer = lignes
-    .filter((l) => l.statut !== 'paye' || l.arrieresAvant > 0)
-    .map((l) => ({ ...l, doit: Math.max(l.du - l.paye, 0) + l.arrieresAvant }))
+    .filter(enRetard)
+    .map((l) => ({ ...l, doit: (l.statut === 'avenir' ? 0 : Math.max(l.du - l.paye, 0)) + l.arrieresAvant }))
     .sort((a, b) => b.doit - a.doit);
+  const aVenir = lignes.filter((l) => l.statut === 'avenir' && !enRetard(l));
   const aJour = lignes.filter((l) => l.statut === 'paye' && l.arrieresAvant === 0);
+  const demarrage = !proprio || nbLogements === 0 || !aDesLocataires;
 
   const relancer = async (l: LigneMois) => {
     const loc = await getLocataire(db, l.locataire_id);
     if (!loc) return;
-    const solde = await ficheSolde(db, loc, mois);
+    const solde = await ficheSolde(db, loc);
     relancerWhatsApp({
       telephone: l.telephone,
       nom: l.nom,
@@ -68,10 +130,10 @@ export default function Accueil() {
     });
   };
 
-  const detail = (l: LigneMois & { doit: number }) => {
-    const nbMois = Math.round(l.doit / Math.max(l.du, 1));
-    if (l.statut === 'partiel' && l.arrieresAvant === 0) return 'partiel';
-    return nbMois > 1 ? `${nbMois} mois de retard` : 'loyer du mois';
+  const detail = (l: LigneMois) => {
+    if (l.nbMoisRetard > 1) return `${l.nbMoisRetard} mois de retard`;
+    if (l.statut === 'partiel') return 'partiel';
+    return 'en retard';
   };
 
   const bandeau = (
@@ -83,25 +145,30 @@ export default function Accueil() {
         paddingBottom: 72,
         gap: Spacing.three,
       }}>
-      <Row>
-        <View style={{ flex: 1 }}>
-          <Text style={{ color: c.heroMuted, fontSize: 14 }}>{salutation()},</Text>
-          {proprio ? (
-            <Text style={{ color: c.heroText, fontSize: 22, fontWeight: '800' }} numberOfLines={1}>
-              {proprio}
+      <View>
+        <Text style={{ color: c.heroMuted, fontSize: 14 }}>{salutation()},</Text>
+        {proprio ? (
+          <Text style={{ color: c.heroText, fontSize: 22, fontWeight: '800' }} numberOfLines={1}>
+            {proprio}
+          </Text>
+        ) : (
+          <Pressable onPress={() => router.push('/profil')} accessibilityRole="link">
+            <Text style={{ color: c.heroText, fontSize: 18, fontWeight: '700', textDecorationLine: 'underline' }}>
+              Ajoutez votre nom
             </Text>
-          ) : (
-            <Pressable onPress={() => router.push('/profil')} accessibilityRole="link">
-              <Text style={{ color: c.heroText, fontSize: 18, fontWeight: '700', textDecorationLine: 'underline' }}>
-                Ajoutez votre nom
-              </Text>
-            </Pressable>
-          )}
-        </View>
-      </Row>
+          </Pressable>
+        )}
+      </View>
       <Row>
         <IconButton icon="chevron-back" label="Mois précédent" variant="onHero" onPress={() => setMois(decalerMois(mois, -1))} />
-        <Text style={{ color: c.heroText, fontSize: 16, fontWeight: '700', textTransform: 'capitalize' }}>{libelleMois(mois)}</Text>
+        <Pressable onPress={() => setMois(moisCourant())} accessibilityRole="button" accessibilityLabel="Revenir au mois en cours">
+          <Text style={{ color: c.heroText, fontSize: 16, fontWeight: '700', textTransform: 'capitalize', textAlign: 'center' }}>
+            {libelleMois(mois)}
+          </Text>
+          {mois !== moisCourant() && (
+            <Text style={{ color: c.heroMuted, fontSize: 12, textAlign: 'center' }}>Toucher pour revenir à aujourd'hui</Text>
+          )}
+        </Pressable>
         <IconButton icon="chevron-forward" label="Mois suivant" variant="onHero" onPress={() => setMois(decalerMois(mois, 1))} />
       </Row>
     </View>
@@ -109,7 +176,7 @@ export default function Accueil() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Screen tabs top={bandeau}>
+      <Screen tabs fab top={bandeau}>
         <Card
           style={{
             marginTop: -56,
@@ -132,8 +199,8 @@ export default function Accueil() {
           <ProgressBar value={taux} />
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <StatTile value={compte('paye')} label={compte('paye') > 1 ? 'Payés' : 'Payé'} tone="success" />
-            <StatTile value={compte('partiel')} label={compte('partiel') > 1 ? 'Partiels' : 'Partiel'} tone="warning" />
-            <StatTile value={compte('impaye')} label={compte('impaye') > 1 ? 'Impayés' : 'Impayé'} tone="danger" />
+            <StatTile value={compte('avenir')} label="À venir" tone="neutral" />
+            <StatTile value={compte('partiel') + compte('impaye')} label="En retard" tone="danger" />
           </View>
           <Row style={{ flexWrap: 'wrap' }}>
             <T variant="small">Attendu : {formatGNF(attendu)}</T>
@@ -145,60 +212,75 @@ export default function Accueil() {
           </Row>
         </Card>
 
-        {lignes.length === 0 ? (
-          <Empty
-            icon="home-outline"
-            title="Aucun locataire ce mois-ci"
-            text="Ajoutez un logement puis un locataire pour suivre vos loyers."
-            action={<Button title="Ajouter un logement" onPress={() => router.push('/logement/nouveau')} />}
-          />
-        ) : (
-          <>
-            {aRelancer.length > 0 && <SectionTitle title="À relancer" />}
-            {aRelancer.map((l) => (
-              <Card key={l.locataire_id} style={{ gap: 12, padding: 14 }}>
-                <Pressable
-                  onPress={() => router.push(`/locataire/${l.locataire_id}`)}
-                  accessibilityRole="link"
-                  accessibilityLabel={`Voir la fiche de ${l.nom}`}
-                  style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 12 }, pressed && { opacity: 0.7 }]}>
-                  <Avatar nom={l.nom} tone={l.arrieresAvant > 0 ? 'danger' : TONE[l.statut]} />
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <T style={{ fontWeight: '700' }} numberOfLines={1}>{l.nom}</T>
-                    <T variant="small" numberOfLines={1}>
-                      {l.logement_nom ?? 'Logement supprimé'} · {detail(l)}
-                    </T>
-                  </View>
-                  <T style={{ fontWeight: '800' }} color={l.arrieresAvant > 0 || l.statut === 'impaye' ? c.danger : c.warning}>
-                    {formatCourt(l.doit)}
-                  </T>
-                </Pressable>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <Button
-                    small
-                    title="Encaisser"
-                    style={{ flex: 1 }}
-                    onPress={() => router.push({ pathname: '/paiement/nouveau', params: { locataire: l.locataire_id, mois } })}
-                  />
-                  <Button small variant="secondary" icon="chatbubble-outline" title="Relancer" style={{ flex: 1 }} onPress={() => relancer(l)} />
-                </View>
-              </Card>
-            ))}
+        {demarrage && <Demarrage profil={!!proprio} logements={nbLogements > 0} locataires={aDesLocataires} />}
 
-            {aJour.length > 0 && <SectionTitle title="À jour" />}
-            {aJour.map((l) => (
-              <Card key={l.locataire_id} onPress={() => router.push(`/locataire/${l.locataire_id}`)} style={{ padding: 14 }}>
-                <Row style={{ gap: 12 }}>
-                  <Avatar nom={l.nom} tone="success" />
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <T style={{ fontWeight: '700' }} numberOfLines={1}>{l.nom}</T>
-                    <T variant="small" numberOfLines={1}>{l.logement_nom ?? 'Logement supprimé'}</T>
-                  </View>
-                  <Badge label="Payé" tone="success" />
-                </Row>
-              </Card>
-            ))}
-          </>
+        {aRelancer.length > 0 && <SectionTitle title="À relancer" />}
+        {aRelancer.map((l) => (
+          <Card key={l.locataire_id} style={{ gap: 12, padding: 14 }}>
+            <Pressable
+              onPress={() => router.push(`/locataire/${l.locataire_id}`)}
+              accessibilityRole="link"
+              accessibilityLabel={`Voir la fiche de ${l.nom}`}
+              style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 12 }, pressed && { opacity: 0.7 }]}>
+              <Avatar nom={l.nom} tone={l.arrieresAvant > 0 ? 'danger' : TONE[l.statut]} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <T style={{ fontWeight: '700' }} numberOfLines={1}>{l.nom}</T>
+                <T variant="small" numberOfLines={2}>
+                  {l.logement_nom ?? 'Logement supprimé'} · {detail(l)}
+                </T>
+              </View>
+              <T style={{ fontWeight: '800' }} color={l.arrieresAvant > 0 || l.statut === 'impaye' ? c.danger : c.warning}>
+                {formatCourt(l.doit)}
+              </T>
+            </Pressable>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Button
+                small
+                title="Encaisser"
+                style={{ flex: 1 }}
+                onPress={() => router.push({ pathname: '/paiement/nouveau', params: { locataire: l.locataire_id, mois } })}
+              />
+              <Button small variant="secondary" icon="chatbubble-outline" title="Relancer" style={{ flex: 1 }} onPress={() => relancer(l)} />
+            </View>
+          </Card>
+        ))}
+
+        {aVenir.length > 0 && <SectionTitle title="À venir" />}
+        {aVenir.map((l) => (
+          <Card key={l.locataire_id} onPress={() => router.push(`/locataire/${l.locataire_id}`)} style={{ padding: 14 }}>
+            <Row style={{ gap: 12 }}>
+              <Avatar nom={l.nom} tone="neutral" />
+              <View style={{ flex: 1, gap: 2 }}>
+                <T style={{ fontWeight: '700' }} numberOfLines={1}>{l.nom}</T>
+                <T variant="small" numberOfLines={2}>
+                  {formatGNF(l.du - l.paye)} · dû le {formatDate(l.echeance)}
+                </T>
+              </View>
+              <Badge label={l.paye > 0 ? 'Partiel' : 'À venir'} tone={l.paye > 0 ? 'warning' : 'neutral'} />
+            </Row>
+          </Card>
+        ))}
+
+        {aJour.length > 0 && <SectionTitle title="À jour" />}
+        {aJour.map((l) => (
+          <Card key={l.locataire_id} onPress={() => router.push(`/locataire/${l.locataire_id}`)} style={{ padding: 14 }}>
+            <Row style={{ gap: 12 }}>
+              <Avatar nom={l.nom} tone="success" />
+              <View style={{ flex: 1, gap: 2 }}>
+                <T style={{ fontWeight: '700' }} numberOfLines={1}>{l.nom}</T>
+                <T variant="small" numberOfLines={1}>{l.logement_nom ?? 'Logement supprimé'}</T>
+              </View>
+              <Badge label="Payé" tone="success" />
+            </Row>
+          </Card>
+        ))}
+
+        {lignes.length === 0 && !demarrage && (
+          <Card style={{ alignItems: 'center', paddingVertical: Spacing.four }}>
+            <T variant="small" style={{ textAlign: 'center' }}>
+              Aucun loyer pour {libelleMois(mois)}.
+            </T>
+          </Card>
         )}
       </Screen>
       <AddButton />

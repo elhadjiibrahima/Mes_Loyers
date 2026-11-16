@@ -12,6 +12,7 @@ import {
   Icon,
   IconButton,
   InfoRow,
+  Introuvable,
   Row,
   Screen,
   SectionTitle,
@@ -22,13 +23,16 @@ import {
   annulerDepart,
   calendrierAnnee,
   deletePaiementLot,
-  ficheSolde,
+  calculerSolde,
+  getContrat,
   getLocataire,
+  loyerDu,
   getProfil,
   libelleMode,
   listPaiements,
   listPaiementsLot,
   payeParMois,
+  type Contrat,
   type EtatMois,
   type Locataire,
   type Paiement,
@@ -77,7 +81,8 @@ export default function FicheLocataire() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
   const c = useTheme();
-  const [loc, setLoc] = useState<Locataire | null>(null);
+  const [loc, setLoc] = useState<Locataire | null | undefined>(undefined);
+  const [contrat, setContrat] = useState<Contrat | null>(null);
   const [paiements, setPaiements] = useState<Paiement[]>([]);
   const [solde, setSolde] = useState<Solde | null>(null);
   const [paye, setPaye] = useState<Map<string, number>>(new Map());
@@ -86,20 +91,24 @@ export default function FicheLocataire() {
   const charger = useCallback(() => {
     const n = Number(id);
     getLocataire(db, n).then(async (l) => {
-      setLoc(l);
       if (l) {
-        setSolde(await ficheSolde(db, l));
-        setPaye(await payeParMois(db, l.id));
+        const [ct, p] = await Promise.all([getContrat(db, l), payeParMois(db, l.id)]);
+        setContrat(ct);
+        setPaye(p);
+        setSolde(calculerSolde(ct, p));
       }
+      setLoc(l);
     });
     listPaiements(db, n).then(setPaiements);
   }, [db, id]);
   useFocusEffect(charger);
 
-  if (!loc || !solde) return null;
+  if (loc === undefined) return null;
+  if (loc === null) return <Introuvable quoi="Locataire" />;
+  if (!solde || !contrat) return null;
   const parti = loc.date_sortie != null;
   const impayes = solde.moisImpayes.map((m) => m.mois);
-  const calendrier = calendrierAnnee(loc, paye, annee);
+  const calendrier = calendrierAnnee(contrat, paye, annee);
 
   const couleurs: Record<EtatMois, { bg: string; fg: string; marque: string; libelle: string; pointille?: boolean }> = {
     paye: { bg: c.successBg, fg: c.success, marque: '✓', libelle: 'payé' },
@@ -199,7 +208,7 @@ export default function FicheLocataire() {
       <Card style={{ gap: 12 }}>
         <Row>
           <T variant="small">{solde.arrieres > 0 ? 'Doit au total' : 'Situation'}</T>
-          <T variant="small">Loyer {formatNombre(loc.loyer)} / mois</T>
+          <T variant="small">Loyer {formatNombre(loyerDu(contrat, moisCourant()))} / mois</T>
         </Row>
         {solde.arrieres > 0 ? (
           <>
@@ -210,9 +219,15 @@ export default function FicheLocataire() {
           </>
         ) : (
           <>
-            <T variant="huge" color={c.success}>À jour ✓</T>
+            <T variant="huge" color={c.success}>{solde.enCours ? 'Aucun retard ✓' : 'À jour ✓'}</T>
             {solde.payeJusqua && <T variant="small">Payé jusqu'à {libelleMois(solde.payeJusqua)}</T>}
           </>
+        )}
+        {solde.enCours && (
+          <T variant="small" style={{ fontWeight: '700' }} color={c.warning}>
+            Loyer de {libelleMois(solde.enCours.mois)} : {formatGNF(solde.enCours.reste)} à payer avant le{' '}
+            {formatDate(solde.enCours.echeance)}
+          </T>
         )}
         {solde.avance > 0 && <T variant="small">Dont {formatGNF(solde.avance)} d'avance</T>}
 
@@ -254,6 +269,11 @@ export default function FicheLocataire() {
         <InfoRow label="Caution" value={formatGNF(loc.caution)} />
         {parti && loc.caution_rendue != null && <InfoRow label="Rendue au départ" value={formatGNF(loc.caution_rendue)} />}
         <InfoRow label="Entré le" value={formatDate(loc.date_entree)} />
+        <InfoRow label="Loyer dû le" value={loc.jour_echeance === 1 ? '1er du mois' : `${loc.jour_echeance} du mois`} />
+        {contrat.historique.length > 1 &&
+          contrat.historique.map((h) => (
+            <InfoRow key={h.depuis} label={`Loyer depuis ${libelleMoisCourt(h.depuis)}`} value={formatGNF(h.montant)} />
+          ))}
         <InfoRow label="Téléphone" value={loc.telephone ?? '—'} last />
       </Card>
 

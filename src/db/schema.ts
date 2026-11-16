@@ -1,14 +1,16 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const DATABASE_VERSION = 2;
+export const DATABASE_VERSION = 3;
 
 /** Crée ou met à jour le schéma de la base locale (mode hors ligne). */
 export async function migrateDb(db: SQLiteDatabase) {
+  // À chaque ouverture : les clés étrangères (suppressions en cascade) ne sont
+  // actives que si on les demande sur la connexion.
+  await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   let version = row?.user_version ?? 0;
   if (version >= DATABASE_VERSION) return;
-
-  await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
   if (version === 0) {
     await db.execAsync(`
@@ -68,6 +70,39 @@ export async function migrateDb(db: SQLiteDatabase) {
       `);
     });
     version = 2;
+  }
+
+  if (version === 2) {
+    // v3 : jour d'échéance, historique des loyers (une augmentation ne réécrit
+    // plus le passé) et dépenses par logement.
+    await db.withTransactionAsync(async () => {
+      await db.execAsync(`
+        ALTER TABLE locataires ADD COLUMN jour_echeance INTEGER NOT NULL DEFAULT 5;
+
+        CREATE TABLE IF NOT EXISTS loyers_historique (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          locataire_id INTEGER NOT NULL REFERENCES locataires(id) ON DELETE CASCADE,
+          depuis TEXT NOT NULL,          -- AAAA-MM : premier mois au nouveau tarif
+          montant INTEGER NOT NULL,
+          UNIQUE (locataire_id, depuis)
+        );
+        INSERT OR IGNORE INTO loyers_historique (locataire_id, depuis, montant)
+          SELECT id, debut_loyer, loyer FROM locataires;
+
+        CREATE TABLE IF NOT EXISTS depenses (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          logement_id INTEGER REFERENCES logements(id) ON DELETE SET NULL,
+          date TEXT NOT NULL,            -- AAAA-MM-JJ
+          montant INTEGER NOT NULL,
+          categorie TEXT NOT NULL,
+          libelle TEXT,
+          cree_le TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_depenses_date ON depenses(date);
+        CREATE INDEX IF NOT EXISTS idx_paiements_date ON paiements(date_paiement);
+      `);
+    });
+    version = 3;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

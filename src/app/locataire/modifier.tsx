@@ -1,22 +1,43 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
+import { Alert } from 'react-native';
 
 import { FormulaireLocataire } from '@/components/locataire-form';
-import { Screen, T } from '@/components/ui';
-import { getLocataire, updateLocataire, type Locataire } from '@/db/queries';
+import { Button, Introuvable, Screen } from '@/components/ui';
+import { deleteLocataire, getLocataire, updateLocataire, type Locataire } from '@/db/queries';
 import { fermer } from '@/lib/actions';
 
 export default function ModifierLocataire() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
-  const [loc, setLoc] = useState<Locataire | null>(null);
+  const [loc, setLoc] = useState<Locataire | null | undefined>(undefined);
 
   useEffect(() => {
     getLocataire(db, Number(id)).then(setLoc);
   }, [db, id]);
 
-  if (!loc) return null;
+  if (loc === undefined) return null;
+  if (loc === null) return <Introuvable quoi="Locataire" />;
+
+  const supprimer = () =>
+    Alert.alert(
+      'Supprimer définitivement ?',
+      `${loc.nom} et tous ses paiements seront effacés. Pour un locataire qui quitte le logement, utilisez plutôt « Enregistrer le départ ».`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteLocataire(db, loc.id);
+            if (router.canDismiss()) router.dismissAll();
+            router.replace('/locataires');
+          },
+        },
+      ],
+    );
+
   return (
     <Screen>
       <FormulaireLocataire
@@ -26,9 +47,7 @@ export default function ModifierLocataire() {
           fermer();
         }}
       />
-      <T variant="small">
-        Attention : changer le loyer ou le premier mois dû recalcule aussi les arriérés passés.
-      </T>
+      <Button variant="danger" icon="trash-outline" title="Supprimer ce locataire" onPress={supprimer} />
     </Screen>
   );
 }
