@@ -48,7 +48,7 @@ export default function Logements() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Screen tabs>
+      <Screen tabs fab>
         <Row style={{ marginTop: Spacing.four }}>
           <T variant="title">Logements</T>
           <IconButton icon="add" label="Ajouter un logement" variant="primary" onPress={() => router.push('/logement/nouveau')} />

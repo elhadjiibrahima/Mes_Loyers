@@ -3,7 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
-import { Button, Field, Screen, T } from '@/components/ui';
+import { Button, Field, Introuvable, Screen, T } from '@/components/ui';
 import { deleteLogement, getLogement, updateLogement, type Logement } from '@/db/queries';
 import { fermer } from '@/lib/actions';
 import { parseMontant } from '@/lib/format';
@@ -11,14 +11,14 @@ import { parseMontant } from '@/lib/format';
 export default function ModifierLogement() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
-  const [logement, setLogement] = useState<Logement | null>(null);
+  const [logement, setLogement] = useState<Logement | null | undefined>(undefined);
   const [nom, setNom] = useState('');
   const [adresse, setAdresse] = useState('');
   const [loyer, setLoyer] = useState('');
 
   useEffect(() => {
     getLogement(db, Number(id)).then((l) => {
-      if (!l) return;
+      if (!l) return setLogement(null);
       setLogement(l);
       setNom(l.nom);
       setAdresse(l.adresse ?? '');
@@ -26,7 +26,8 @@ export default function ModifierLogement() {
     });
   }, [db, id]);
 
-  if (!logement) return null;
+  if (logement === undefined) return null;
+  if (logement === null) return <Introuvable quoi="Logement" />;
 
   const enregistrer = async () => {
     const montant = parseMontant(loyer);

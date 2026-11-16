@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -12,27 +13,44 @@ function Champ({ label, valeur, onPress }: { label: string; valeur: string; onPr
   const c = useTheme();
   return (
     <View style={{ gap: Spacing.one }}>
-      <T variant="small">{label}</T>
+      <T variant="label">{label}</T>
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={`${label} : ${valeur}`}
         style={[styles.champ, { backgroundColor: c.backgroundElement, borderColor: c.border }]}>
         <Text style={{ color: c.text, fontSize: 16 }}>{valeur}</Text>
-        <Text style={{ color: c.textSecondary }}>📅</Text>
+        <Ionicons name="calendar-outline" size={20} color={c.primary} />
       </Pressable>
     </View>
   );
 }
 
-/** Sélecteur de mois : ‹ novembre 2026 › */
-export function MonthField({ label, value, onChange }: { label: string; value: string; onChange: (m: string) => void }) {
+/** Sélecteur de mois : ‹ novembre 2026 ›. `min` empêche de remonter avant un mois. */
+export function MonthField({
+  label,
+  value,
+  onChange,
+  min,
+}: {
+  label: string;
+  value: string;
+  onChange: (m: string) => void;
+  min?: string;
+}) {
   const c = useTheme();
+  const bloque = min != null && value <= min;
   return (
     <View style={{ gap: Spacing.one }}>
-      <T variant="small">{label}</T>
+      <T variant="label">{label}</T>
       <View style={[styles.champ, { backgroundColor: c.backgroundElement, borderColor: c.border, paddingVertical: 6 }]}>
-        <Pressable accessibilityLabel="Mois précédent" hitSlop={10} onPress={() => onChange(decalerMois(value, -1))} style={styles.fleche}>
+        <Pressable
+          accessibilityLabel="Mois précédent"
+          accessibilityState={{ disabled: bloque }}
+          disabled={bloque}
+          hitSlop={10}
+          onPress={() => onChange(decalerMois(value, -1))}
+          style={[styles.fleche, bloque && { opacity: 0.25 }]}>
           <Text style={{ color: c.primary, fontSize: 22 }}>‹</Text>
         </Pressable>
         <Text style={{ color: c.text, fontSize: 16, textTransform: 'capitalize' }}>{libelleMois(value)}</Text>

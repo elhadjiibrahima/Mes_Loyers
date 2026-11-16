@@ -90,14 +90,16 @@ function FormulairePaiement({ locId, moisParam }: { locId: number; moisParam?: s
       const l = await getLocataire(db, locId);
       if (!l) return;
       setLoc(l);
-      const s = await ficheSolde(db, l, moisParam ?? moisCourant());
+      const s = await ficheSolde(db, l);
       setSolde(s);
-      const ancien = s.moisImpayes[0];
-      if (ancien) {
-        setPremierMois(ancien.mois);
-        setMontant(ancien.reste);
+      // Ordre : plus ancien impayé, puis loyer du mois en cours, puis mois suivant le dernier payé.
+      const aRegler = s.moisImpayes[0] ?? s.enCours;
+      if (aRegler) {
+        setPremierMois(aRegler.mois);
+        setMontant(aRegler.reste);
       } else {
-        if (!moisParam && s.payeJusqua) setPremierMois(decalerMois(s.payeJusqua, 1));
+        const suivant = s.payeJusqua ? decalerMois(s.payeJusqua, 1) : (moisParam ?? moisCourant());
+        setPremierMois(suivant < l.debut_loyer ? l.debut_loyer : suivant);
         setMontant(l.loyer);
       }
     })();
@@ -114,7 +116,7 @@ function FormulairePaiement({ locId, moisParam }: { locId: number; moisParam?: s
 
   // Ce qui restera dû sur les mois échus après ce paiement.
   const reglesEchus = repartition.filter((r) => r.mois <= moisCourant()).reduce((s, r) => s + r.montant, 0);
-  const resteApres = Math.max(solde.arrieres - reglesEchus, 0);
+  const resteApres = Math.max(solde.arrieres + (solde.enCours?.reste ?? 0) - reglesEchus, 0);
   const dernierComplet = [...repartition].reverse().find((r) => r.montant >= loc.loyer)?.mois;
 
   const nbMoisPayes = loc.loyer > 0 ? Math.round((montant / loc.loyer) * 10) / 10 : 0;
@@ -198,7 +200,7 @@ function FormulairePaiement({ locId, moisParam }: { locId: number; moisParam?: s
         />
       </View>
 
-      <MonthField label="À partir du mois" value={premierMois} onChange={setPremierMois} />
+      <MonthField label="À partir du mois" value={premierMois} onChange={setPremierMois} min={loc.debut_loyer} />
 
       {repartition.length > 0 && (
         <View style={[styles.regle, { backgroundColor: c.backgroundSelected }]}>
@@ -223,7 +225,7 @@ function FormulairePaiement({ locId, moisParam }: { locId: number; moisParam?: s
                 ? dernierComplet
                   ? `${prenom(loc.nom)} sera à jour jusqu'à ${libelleMois(dernierComplet)}`
                   : `${prenom(loc.nom)} sera à jour`
-                : `Il restera ${formatGNF(resteApres)} d'arriérés`}
+                : `Il restera ${formatGNF(resteApres)} à payer`}
             </T>
           </View>
         </View>

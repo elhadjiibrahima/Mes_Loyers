@@ -39,7 +39,7 @@ export default function Locataires() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Screen tabs>
+      <Screen tabs fab>
         <Row style={{ marginTop: Spacing.four }}>
           <T variant="title">Locataires</T>
           <IconButton icon="add" label="Ajouter un locataire" variant="primary" onPress={() => router.push('/locataire/nouveau')} />

@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { Alert, Linking } from 'react-native';
 
-import { libelleMode, type Locataire, type Paiement, type Profil } from '@/db/queries';
+import { libelleCategorie, libelleMode, type Bilan, type Depense, type Locataire, type Paiement, type Profil } from '@/db/queries';
 import { formatDate, formatGNF, libelleMois, libellePeriode } from '@/lib/format';
 
 /** Ferme un écran (modale) même s'il a été ouvert directement par un lien. */
@@ -115,5 +115,64 @@ export async function partagerQuittance(lot: Paiement[], l: Locataire, profil: P
     }
   } catch {
     Alert.alert('Erreur', 'La quittance n’a pas pu être générée.');
+  }
+}
+
+const NOMS_MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+
+function htmlBilan(b: Bilan, depenses: Depense[], profil: Profil) {
+  const net = b.revenus - b.depenses;
+  const lignesMois = NOMS_MOIS.map(
+    (m, i) =>
+      `<tr><td>${m}</td><td>${formatGNF(b.revenusParMois[i])}</td><td>${formatGNF(b.depensesParMois[i])}</td><td>${formatGNF(b.revenusParMois[i] - b.depensesParMois[i])}</td></tr>`,
+  ).join('');
+  const lignesLogements = b.parLogement
+    .map((l) => `<tr><td>${echapper(l.nom)}</td><td>${formatGNF(l.revenus)}</td><td>${formatGNF(l.depenses)}</td><td>${formatGNF(l.revenus - l.depenses)}</td></tr>`)
+    .join('');
+  const lignesDepenses = depenses
+    .map(
+      (d) =>
+        `<tr><td>${formatDate(d.date)}</td><td>${libelleCategorie(d.categorie)}${d.libelle ? ' · ' + echapper(d.libelle) : ''}</td><td>${echapper(d.logement_nom ?? 'Général')}</td><td>${formatGNF(d.montant)}</td></tr>`,
+    )
+    .join('');
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<style>
+  body { font-family: -apple-system, Roboto, Helvetica, Arial, sans-serif; color: #111; padding: 36px; font-size: 13px; }
+  h1 { font-size: 24px; margin: 0 0 4px; color: #0F7B5F; }
+  h2 { font-size: 16px; margin: 28px 0 8px; }
+  .muted { color: #666; }
+  .kpi { display: flex; gap: 12px; margin-top: 20px; }
+  .kpi div { flex: 1; border: 1px solid #ddd; border-radius: 10px; padding: 12px; }
+  .kpi strong { display: block; font-size: 18px; margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 6px 4px; border-bottom: 1px solid #eee; text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: #666; font-weight: 600; }
+</style></head><body>
+  <h1>Bilan ${b.annee}</h1>
+  <div class="muted">${echapper(profil.nom || 'Propriétaire')}${profil.ville ? ' · ' + echapper(profil.ville) : ''}</div>
+  <div class="kpi">
+    <div>Loyers encaissés<strong>${formatGNF(b.revenus)}</strong></div>
+    <div>Dépenses<strong>${formatGNF(b.depenses)}</strong></div>
+    <div>Bénéfice net<strong style="color:${net >= 0 ? '#0B6650' : '#A61E25'}">${formatGNF(net)}</strong></div>
+  </div>
+  <h2>Par mois</h2>
+  <table><tr><th>Mois</th><th>Encaissé</th><th>Dépenses</th><th>Net</th></tr>${lignesMois}</table>
+  ${lignesLogements ? `<h2>Par logement</h2><table><tr><th>Logement</th><th>Encaissé</th><th>Dépenses</th><th>Net</th></tr>${lignesLogements}</table>` : ''}
+  ${lignesDepenses ? `<h2>Détail des dépenses</h2><table><tr><th>Date</th><th>Dépense</th><th>Logement</th><th>Montant</th></tr>${lignesDepenses}</table>` : ''}
+  <p class="muted" style="margin-top:28px">Encaissements comptés à la date du paiement. Document généré par Mes Loyers.</p>
+</body></html>`;
+}
+
+export async function partagerBilan(b: Bilan, depenses: Depense[], profil: Profil) {
+  try {
+    const { uri } = await Print.printToFileAsync({ html: htmlBilan(b, depenses, profil) });
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: `Bilan ${b.annee}` });
+    } else {
+      Alert.alert('Bilan créé', uri);
+    }
+  } catch {
+    Alert.alert('Erreur', 'Le bilan n’a pas pu être généré.');
   }
 }
