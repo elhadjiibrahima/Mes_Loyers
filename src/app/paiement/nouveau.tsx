@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { DateField, MonthField } from '@/components/date-fields';
-import { Avatar, Button, Card, Chips, Empty, Icon, Row, Screen, T } from '@/components/ui';
+import { Avatar, Button, Card, Chips, Empty, Icon, IconButton, Row, Screen, T, useSaisieRemplace } from '@/components/ui';
 import {
   addPaiements,
   ficheSolde,
@@ -103,6 +103,8 @@ function FormulairePaiement({ locId, moisParam }: { locId: number; moisParam?: s
     })();
   }, [db, locId, moisParam]);
 
+  const saisie = useSaisieRemplace(montant ? formatNombre(montant) : '', (t) => setMontant(parseMontant(t)), '0');
+
   useEffect(() => {
     if (!loc || montant <= 0) return setRepartition([]);
     repartirPaiement(db, loc, premierMois, montant).then(setRepartition);
@@ -115,8 +117,25 @@ function FormulairePaiement({ locId, moisParam }: { locId: number; moisParam?: s
   const resteApres = Math.max(solde.arrieres - reglesEchus, 0);
   const dernierComplet = [...repartition].reverse().find((r) => r.montant >= loc.loyer)?.mois;
 
+  const nbMoisPayes = loc.loyer > 0 ? Math.round((montant / loc.loyer) * 10) / 10 : 0;
+
   const enregistrer = async () => {
     if (repartition.length === 0) return Alert.alert('Montant manquant', 'Indiquez le montant reçu.');
+    if (nbMoisPayes > 12) {
+      Alert.alert(
+        'Montant inhabituel',
+        `${formatGNF(montant)}, soit ${nbMoisPayes} mois de loyer. Confirmez-vous ce montant ?`,
+        [
+          { text: 'Corriger', style: 'cancel' },
+          { text: 'Confirmer', onPress: valider },
+        ],
+      );
+      return;
+    }
+    valider();
+  };
+
+  const valider = async () => {
     setEnvoi(true);
     const lot = await addPaiements(db, loc.id, repartition, { date_paiement: date, mode });
     fermer();
@@ -151,18 +170,24 @@ function FormulairePaiement({ locId, moisParam }: { locId: number; moisParam?: s
 
       <View style={{ alignItems: 'center', gap: 4, paddingVertical: 8 }}>
         <T variant="small">Montant reçu</T>
-        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, width: '100%' }}>
           <TextInput
             value={montant ? formatNombre(montant) : ''}
             onChangeText={(t) => setMontant(parseMontant(t))}
             keyboardType="number-pad"
-            placeholder="0"
             placeholderTextColor={c.textSecondary}
             accessibilityLabel="Montant reçu en GNF"
-            style={[styles.montant, { color: c.text }]}
+            {...saisie}
+            style={[styles.montant, { color: c.text, fontSize: formatNombre(montant).length > 10 ? 30 : 40 }]}
           />
           <Text style={{ color: c.textSecondary, fontSize: 18, fontWeight: '700' }}>GNF</Text>
+          {montant > 0 && <IconButton icon="close-circle" label="Effacer le montant" onPress={() => setMontant(0)} />}
         </View>
+        {nbMoisPayes > 12 && (
+          <T variant="small" color={c.warning} style={{ fontWeight: '700', textAlign: 'center' }}>
+            Attention : cela fait {nbMoisPayes} mois de loyer. Vérifiez le montant.
+          </T>
+        )}
       </View>
 
       <View style={{ alignItems: 'center' }}>
@@ -232,7 +257,7 @@ function FormulairePaiement({ locId, moisParam }: { locId: number; moisParam?: s
 }
 
 const styles = StyleSheet.create({
-  montant: { fontSize: 40, fontWeight: '800', letterSpacing: -1, minWidth: 120, textAlign: 'center', padding: 0 },
+  montant: { flex: 1, minWidth: 0, fontSize: 40, fontWeight: '800', letterSpacing: -1, textAlign: 'center', padding: 0 },
   regle: { borderRadius: 16, padding: 16, gap: 10 },
   conclusion: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
   modes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

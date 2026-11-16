@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { type ComponentProps, type ReactNode } from 'react';
+import { useRef, type ComponentProps, type ReactNode } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -177,8 +177,32 @@ export function IconButton({
   );
 }
 
+/**
+ * Pour un montant prérempli : au toucher, le champ se vide (l'ancienne valeur
+ * reste en gris) pour que la saisie remplace le montant au lieu de s'y ajouter.
+ * Si rien n'est tapé, l'ancienne valeur revient en quittant le champ.
+ */
+export function useSaisieRemplace(value: string, onChange: (v: string) => void, placeholder?: string) {
+  const ancien = useRef<string | null>(null);
+  return {
+    placeholder: ancien.current ?? placeholder,
+    onFocus: () => {
+      if (value) {
+        ancien.current = value;
+        onChange('');
+      }
+    },
+    onBlur: () => {
+      if (!value && ancien.current) onChange(ancien.current);
+      ancien.current = null;
+    },
+  };
+}
+
 export function Field({ label, ...props }: TextInputProps & { label: string }) {
   const c = useTheme();
+  const remplace = useSaisieRemplace(props.value ?? '', props.onChangeText ?? (() => {}), props.placeholder);
+  const montant = props.keyboardType === 'number-pad';
   return (
     <View style={{ gap: Spacing.one }}>
       <T variant="label">{label}</T>
@@ -186,6 +210,7 @@ export function Field({ label, ...props }: TextInputProps & { label: string }) {
         placeholderTextColor={c.textSecondary}
         accessibilityLabel={label}
         {...props}
+        {...(montant ? remplace : null)}
         style={[styles.input, { color: c.text, backgroundColor: c.backgroundElement, borderColor: c.border }]}
       />
     </View>
