@@ -3,6 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useAcces } from '@/auth/contexte';
 import {
   Avatar,
   Badge,
@@ -87,6 +88,7 @@ export default function FicheLocataire() {
   const [solde, setSolde] = useState<Solde | null>(null);
   const [paye, setPaye] = useState<Map<string, number>>(new Map());
   const [annee, setAnnee] = useState(new Date().getFullYear());
+  const acces = useAcces();
 
   const charger = useCallback(() => {
     const n = Number(id);
@@ -129,6 +131,7 @@ export default function FicheLocataire() {
         text: 'Supprimer',
         style: 'destructive',
         onPress: () =>
+          acces.peutModifier() &&
           Alert.alert('Supprimer ce paiement ?', lot.length > 1 ? `Les ${lot.length} mois de ce paiement seront supprimés.` : undefined, [
             { text: 'Annuler', style: 'cancel' },
             {
@@ -146,6 +149,7 @@ export default function FicheLocataire() {
   };
 
   const annuler = () =>
+    acces.peutModifier() &&
     Alert.alert('Annuler le départ ?', 'Le locataire redevient actif et les retenues sur caution sont supprimées.', [
       { text: 'Non', style: 'cancel' },
       {

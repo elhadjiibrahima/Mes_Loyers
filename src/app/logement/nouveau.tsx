@@ -2,6 +2,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
 import { Alert } from 'react-native';
 
+import { useAcces } from '@/auth/contexte';
 import { Button, Field, Screen } from '@/components/ui';
 import { addLogement } from '@/db/queries';
 import { fermer } from '@/lib/actions';
@@ -12,6 +13,7 @@ export default function NouveauLogement() {
   const [nom, setNom] = useState('');
   const [adresse, setAdresse] = useState('');
   const [loyer, setLoyer] = useState('');
+  const acces = useAcces();
 
   const enregistrer = async () => {
     const montant = parseMontant(loyer);
@@ -19,6 +21,7 @@ export default function NouveauLogement() {
       Alert.alert('Champs manquants', 'Indiquez un nom et un loyer mensuel.');
       return;
     }
+    if (!(await acces.peutAjouterLogement())) return;
     await addLogement(db, { nom: nom.trim(), adresse: adresse.trim(), loyer: montant });
     fermer();
   };

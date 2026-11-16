@@ -2,6 +2,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
+import { useAcces } from '@/auth/contexte';
 import { DateField } from '@/components/date-fields';
 import { Button, Chips, Field, Screen, T } from '@/components/ui';
 import { addDepense, CATEGORIES, listLogements, type CategorieDepense, type Logement } from '@/db/queries';
@@ -16,6 +17,7 @@ export default function NouvelleDepense() {
   const [logementId, setLogementId] = useState<number>(0);
   const [date, setDate] = useState(aujourdHui());
   const [libelle, setLibelle] = useState('');
+  const acces = useAcces();
 
   useEffect(() => {
     listLogements(db).then(setLogements);
@@ -24,6 +26,7 @@ export default function NouvelleDepense() {
   const enregistrer = async () => {
     const m = parseMontant(montant);
     if (m <= 0) return Alert.alert('Montant manquant', 'Indiquez le montant de la dépense.');
+    if (!acces.peutModifier()) return;
     await addDepense(db, { logement_id: logementId || null, date, montant: m, categorie, libelle: libelle.trim() });
     fermer();
   };

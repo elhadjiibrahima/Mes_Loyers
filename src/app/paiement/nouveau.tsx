@@ -3,6 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
+import { useAcces } from '@/auth/contexte';
 import { DateField, MonthField } from '@/components/date-fields';
 import { Avatar, Button, Card, Chips, Empty, Icon, IconButton, Row, Screen, T, useSaisieRemplace } from '@/components/ui';
 import {
@@ -83,6 +84,7 @@ function FormulairePaiement({ locId, moisParam }: { locId: number; moisParam?: s
   const [envoyerQuittance, setEnvoyerQuittance] = useState(true);
   const [repartition, setRepartition] = useState<Repartition[]>([]);
   const [envoi, setEnvoi] = useState(false);
+  const acces = useAcces();
 
   // Par défaut : commencer au plus ancien mois impayé, montant = ce qui reste sur ce mois.
   useEffect(() => {
@@ -123,6 +125,7 @@ function FormulairePaiement({ locId, moisParam }: { locId: number; moisParam?: s
 
   const enregistrer = async () => {
     if (repartition.length === 0) return Alert.alert('Montant manquant', 'Indiquez le montant reçu.');
+    if (!acces.peutModifier()) return;
     if (nbMoisPayes > 12) {
       Alert.alert(
         'Montant inhabituel',

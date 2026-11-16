@@ -3,6 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
+import { useAcces } from '@/auth/contexte';
 import { Button, Field, Introuvable, Screen, T } from '@/components/ui';
 import { deleteLogement, getLogement, updateLogement, type Logement } from '@/db/queries';
 import { fermer } from '@/lib/actions';
@@ -15,6 +16,7 @@ export default function ModifierLogement() {
   const [nom, setNom] = useState('');
   const [adresse, setAdresse] = useState('');
   const [loyer, setLoyer] = useState('');
+  const acces = useAcces();
 
   useEffect(() => {
     getLogement(db, Number(id)).then((l) => {
@@ -32,11 +34,13 @@ export default function ModifierLogement() {
   const enregistrer = async () => {
     const montant = parseMontant(loyer);
     if (!nom.trim() || montant <= 0) return Alert.alert('Champs manquants', 'Indiquez un nom et un loyer mensuel.');
+    if (!acces.peutModifier()) return;
     await updateLogement(db, logement.id, { nom: nom.trim(), adresse: adresse.trim(), loyer: montant });
     fermer();
   };
 
   const supprimer = () => {
+    if (!acces.peutModifier()) return;
     if (logement.locataire_id) {
       Alert.alert('Logement occupé', `Enregistrez d'abord le départ de ${logement.locataire_nom}.`);
       return;

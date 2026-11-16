@@ -3,6 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 
+import { useAcces } from '@/auth/contexte';
 import {
   Button,
   Card,
@@ -37,6 +38,7 @@ export default function BilanScreen() {
   const [annee, setAnnee] = useState(new Date().getFullYear());
   const [bilan, setBilan] = useState<Bilan | null>(null);
   const [depenses, setDepenses] = useState<Depense[]>([]);
+  const acces = useAcces();
 
   const charger = useCallback(() => {
     bilanAnnee(db, annee).then(setBilan);
@@ -49,6 +51,7 @@ export default function BilanScreen() {
   const max = Math.max(...bilan.revenusParMois, ...bilan.depensesParMois, 1);
 
   const supprimer = (d: Depense) =>
+    acces.peutModifier() &&
     Alert.alert('Supprimer cette dépense ?', `${libelleCategorie(d.categorie)} · ${formatGNF(d.montant)}`, [
       { text: 'Annuler', style: 'cancel' },
       {

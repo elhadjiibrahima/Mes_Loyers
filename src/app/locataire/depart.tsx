@@ -3,6 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { Alert, Switch, View } from 'react-native';
 
+import { useAcces } from '@/auth/contexte';
 import { DateField } from '@/components/date-fields';
 import { Avatar, Button, Card, Field, Icon, InfoRow, Introuvable, Row, Screen, T } from '@/components/ui';
 import { enregistrerDepart, ficheSolde, getLocataire, type Locataire } from '@/db/queries';
@@ -19,6 +20,7 @@ export default function Depart() {
   const [arrieres, setArrieres] = useState(0);
   const [deduire, setDeduire] = useState(true);
   const [rendu, setRendu] = useState<string | null>(null);
+  const acces = useAcces();
 
   useEffect(() => {
     getLocataire(db, Number(id)).then(setLoc);
@@ -38,6 +40,7 @@ export default function Depart() {
   const resteDu = Math.max(arrieres - retenue, 0);
 
   const valider = () =>
+    acces.peutModifier() &&
     Alert.alert('Confirmer le départ ?', `${loc.nom} quittera ${loc.logement_nom ?? 'le logement'}, qui redeviendra libre.`, [
       { text: 'Annuler', style: 'cancel' },
       {

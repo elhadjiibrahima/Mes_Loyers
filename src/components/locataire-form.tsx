@@ -2,6 +2,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { Alert, View } from 'react-native';
 
+import { useAcces } from '@/auth/contexte';
 import { DateField, MonthField } from '@/components/date-fields';
 import { Button, Card, Chips, Field, T } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
@@ -32,6 +33,7 @@ export function FormulaireLocataire({
   const [caution, setCaution] = useState(initial?.caution ? String(initial.caution) : '');
   const [jour, setJour] = useState(String(initial?.jour_echeance ?? 5));
   const [envoi, setEnvoi] = useState(false);
+  const acces = useAcces();
 
   useEffect(() => {
     listLogements(db).then(setLogements);
@@ -61,6 +63,7 @@ export function FormulaireLocataire({
     if (!telOk) return Alert.alert('Téléphone invalide', 'Saisissez un numéro avec 8 à 15 chiffres, par exemple 620 00 00 00.');
     if (montant <= 0) return Alert.alert('Loyer manquant', 'Indiquez le loyer mensuel.');
     if (!(j >= 1 && j <= 31)) return Alert.alert("Jour d'échéance invalide", 'Choisissez un jour entre 1 et 31.');
+    if (!acces.peutModifier()) return;
     setEnvoi(true);
     try {
       await onSubmit({

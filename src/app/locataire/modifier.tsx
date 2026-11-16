@@ -3,6 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
+import { useAcces } from '@/auth/contexte';
 import { FormulaireLocataire } from '@/components/locataire-form';
 import { Button, Introuvable, Screen } from '@/components/ui';
 import { deleteLocataire, getLocataire, updateLocataire, type Locataire } from '@/db/queries';
@@ -12,6 +13,7 @@ export default function ModifierLocataire() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
   const [loc, setLoc] = useState<Locataire | null | undefined>(undefined);
+  const acces = useAcces();
 
   useEffect(() => {
     getLocataire(db, Number(id)).then(setLoc);
@@ -21,6 +23,7 @@ export default function ModifierLocataire() {
   if (loc === null) return <Introuvable quoi="Locataire" />;
 
   const supprimer = () =>
+    acces.peutModifier() &&
     Alert.alert(
       'Supprimer définitivement ?',
       `${loc.nom} et tous ses paiements seront effacés. Pour un locataire qui quitte le logement, utilisez plutôt « Enregistrer le départ ».`,

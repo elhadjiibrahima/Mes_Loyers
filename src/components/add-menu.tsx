@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAcces } from '@/auth/contexte';
 import { type IconName } from '@/components/ui';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -19,11 +20,13 @@ export function AddButton() {
   const c = useTheme();
   const insets = useSafeAreaInsets();
   const [ouvert, setOuvert] = useState(false);
+  const acces = useAcces();
   const bas = Platform.OS === 'web' ? 24 : BottomTabInset + insets.bottom + 16;
 
-  const aller = (href: Href) => {
+  const aller = async (href: Href) => {
     setOuvert(false);
-    router.push(href);
+    const permis = href === '/logement/nouveau' ? await acces.peutAjouterLogement() : acces.peutModifier();
+    if (permis) router.push(href);
   };
 
   return (
