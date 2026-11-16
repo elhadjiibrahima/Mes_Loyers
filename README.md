@@ -28,6 +28,8 @@ npx expo start --web    # version navigateur
 - **Abonnement** : 30 jours d'essai gratuit, puis une formule mensuelle selon le nombre de logements (`src/auth/formules.ts` : Particulier 1–2 logements, Essentiel, Pro, Agence). Abonnement expiré : données consultables, modifications bloquées.
 - **Paiement simulé** (`MODE_TEST_PAIEMENT = true`) : un bouton active le mois sans prélever d'argent.
 
+- **Administration** : un compte créé avec une adresse de `ADMIN_EMAILS` (`src/auth/admin.ts`, actuellement `admin@mesloyers.app`) ouvre l'espace d'administration au lieu de l'application : revenu mensuel récurrent, encaissé du mois, propriétaires en essai / abonnés / expirés, enregistrement d'un paiement reçu (Orange Money, MTN, espèces), suspension, mot de passe temporaire. L'admin ne voit pas les locataires ni les paiements des propriétaires.
+
 ⚠️ Pendant cette phase, les comptes sont enregistrés **sur l'appareil** (`comptes.db`). Pour un vrai service (connexion depuis plusieurs téléphones, paiement Orange Money / MTN, mot de passe oublié par e-mail), `src/auth/comptes.ts` devra appeler un serveur ; les écrans ne changeront pas.
 
 ## Base de données (SQLite)

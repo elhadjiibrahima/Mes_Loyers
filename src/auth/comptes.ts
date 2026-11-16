@@ -4,6 +4,7 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import * as Crypto from 'expo-crypto';
 import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 
+import { estAdmin } from '@/auth/admin';
 import { formule, JOURS_ESSAI, JOURS_PAR_MOIS, type FormuleId } from '@/auth/formules';
 
 /**
@@ -24,7 +25,8 @@ export type Abonnement = {
   formule: FormuleId;
   debut: string;
   fin: string;
-  mode: 'essai' | 'test' | 'paiement';
+  /** manuel : paiement reçu (Orange Money, MTN, espèces) et enregistré par l'administrateur. */
+  mode: 'essai' | 'test' | 'paiement' | 'manuel';
   montant: number;
 };
 
@@ -122,12 +124,14 @@ export async function inscrire(nom: string, email: string, motDePasse: string): 
     id = res.lastInsertRowId;
     await db.runAsync('UPDATE comptes SET base = ? WHERE id = ?', premier ? 'loyers.db' : `loyers-${id}.db`, id);
     const debut = dateIso(new Date());
-    await db.runAsync(
-      "INSERT INTO abonnements (compte_id, formule, debut, fin, mode, montant) VALUES (?, 'agence', ?, ?, 'essai', 0)",
-      id,
-      debut,
-      ajouterJours(debut, JOURS_ESSAI - 1),
-    );
+    if (!estAdmin({ email })) {
+      await db.runAsync(
+        "INSERT INTO abonnements (compte_id, formule, debut, fin, mode, montant) VALUES (?, 'agence', ?, ?, 'essai', 0)",
+        id,
+        debut,
+        ajouterJours(debut, JOURS_ESSAI - 1),
+      );
+    }
     await db.runAsync('INSERT OR REPLACE INTO session (cle, valeur) VALUES (?, ?)', SESSION, String(id));
   });
   return (await getCompte(id))!;
@@ -220,7 +224,7 @@ export async function etatAbonnement(compteId: number, aujourdhui = dateIso(new 
  * Enregistre une mensualité. Si l'abonnement est encore en cours, le nouveau mois
  * s'ajoute à la suite ; sinon il commence aujourd'hui.
  */
-export async function payerMois(compteId: number, id: FormuleId, mode: 'test' | 'paiement', mois = 1) {
+export async function payerMois(compteId: number, id: FormuleId, mode: 'test' | 'paiement' | 'manuel', mois = 1) {
   const db = await baseComptes();
   const etat = await etatAbonnement(compteId);
   const aujourdhui = dateIso(new Date());
@@ -237,4 +241,89 @@ export async function payerMois(compteId: number, id: FormuleId, mode: 'test' | 
     mode,
     formule(id).prixMensuel * mois,
   );
+}
+
+// ---------- Administration ----------
+
+export type ProprietaireAdmin = Compte & {
+  cree_le: string;
+  abonnement: EtatAbonnement;
+  nbLogements: number | null;
+};
+
+/** Nombre de logements d'un compte, en ouvrant sa base (null si illisible). */
+async function compterLogements(base: string) {
+  try {
+    const db = await openDatabaseAsync(base);
+    const r = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM logements');
+    return r?.n ?? 0;
+  } catch {
+    return null;
+  }
+}
+
+export async function listProprietaires(): Promise<ProprietaireAdmin[]> {
+  const db = await baseComptes();
+  const comptes = await db.getAllAsync<Compte & { cree_le: string }>(
+    'SELECT id, email, nom, base, cree_le FROM comptes ORDER BY cree_le DESC',
+  );
+  const proprietaires = comptes.filter((c) => !estAdmin(c));
+  return Promise.all(
+    proprietaires.map(async (c) => ({ ...c, abonnement: await etatAbonnement(c.id), nbLogements: await compterLogements(c.base) })),
+  );
+}
+
+export async function getProprietaire(id: number): Promise<ProprietaireAdmin | null> {
+  const db = await baseComptes();
+  const c = await db.getFirstAsync<Compte & { cree_le: string }>('SELECT id, email, nom, base, cree_le FROM comptes WHERE id = ?', id);
+  if (!c || estAdmin(c)) return null;
+  return { ...c, abonnement: await etatAbonnement(c.id), nbLogements: await compterLogements(c.base) };
+}
+
+export type StatsAdmin = {
+  total: number;
+  essai: number;
+  actifs: number;
+  expires: number;
+  /** Encaissé ce mois-ci (abonnements enregistrés depuis le 1er). */
+  revenusMois: number;
+  /** Revenu mensuel récurrent : somme des formules des abonnés actifs. */
+  revenuRecurrent: number;
+};
+
+export function statistiques(liste: ProprietaireAdmin[], historiques: Abonnement[]): StatsAdmin {
+  const mois = dateIso(new Date()).slice(0, 7);
+  const actifs = liste.filter((p) => p.abonnement.statut === 'actif');
+  return {
+    total: liste.length,
+    essai: liste.filter((p) => p.abonnement.statut === 'essai').length,
+    actifs: actifs.length,
+    expires: liste.filter((p) => p.abonnement.statut === 'expire').length,
+    revenusMois: historiques.filter((a) => a.mode !== 'essai' && a.debut.slice(0, 7) === mois).reduce((s, a) => s + a.montant, 0),
+    revenuRecurrent: actifs.reduce((s, p) => s + formule(p.abonnement.formule).prixMensuel, 0),
+  };
+}
+
+export async function tousLesAbonnements() {
+  const db = await baseComptes();
+  return db.getAllAsync<Abonnement>('SELECT * FROM abonnements');
+}
+
+/** Coupe l'accès immédiatement : l'abonnement en cours se termine hier. */
+export async function suspendre(compteId: number) {
+  const db = await baseComptes();
+  const hier = ajouterJours(dateIso(new Date()), -1);
+  await db.runAsync('UPDATE abonnements SET fin = ? WHERE compte_id = ? AND fin > ?', hier, compteId, hier);
+}
+
+/** Donne un mot de passe temporaire à communiquer au propriétaire (mot de passe oublié). */
+export async function reinitialiserMotDePasse(compteId: number) {
+  const db = await baseComptes();
+  // 32 caractères (sans l, o, 0, 1) : chaque octet % 32 tombe de façon uniforme.
+  const alphabet = 'abcdefghijkmnpqrstuvwxyz23456789';
+  const octets = Crypto.getRandomBytes(10);
+  const temporaire = Array.from(octets, (o) => alphabet[o % alphabet.length]).join('');
+  const sel = bytesToHex(Crypto.getRandomBytes(16));
+  await db.runAsync('UPDATE comptes SET mot_de_passe = ?, sel = ? WHERE id = ?', await hacher(temporaire, sel), sel, compteId);
+  return temporaire;
 }
