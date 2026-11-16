@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react';
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -25,6 +26,8 @@ export function Screen({ children, tabs = false }: { children: ReactNode; tabs?:
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={{
         padding: Spacing.three,
+        // Sur le web, la barre d'onglets est en haut et passe par-dessus le contenu.
+        paddingTop: Spacing.three + (tabs && Platform.OS === 'web' ? 64 : 0),
         paddingBottom: Spacing.five + (tabs ? BottomTabInset + insets.bottom : insets.bottom),
         gap: Spacing.three,
         width: '100%',
