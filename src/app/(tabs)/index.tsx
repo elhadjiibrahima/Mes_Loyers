@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAuth } from '@/auth/contexte';
 import { AddButton } from '@/components/add-menu';
 import {
   Avatar,
@@ -36,6 +37,45 @@ import {
 } from '@/lib/format';
 
 const TONE: Record<LigneMois['statut'], Tone> = { paye: 'success', partiel: 'warning', impaye: 'danger', avenir: 'neutral' };
+
+/** Bandeau d'abonnement : essai en cours, fin proche ou abonnement expiré. */
+function BandeauAbonnement() {
+  const c = useTheme();
+  const { abonnement } = useAuth();
+  if (!abonnement) return null;
+  const { statut, joursRestants } = abonnement;
+  if (statut === 'actif' && joursRestants > 5) return null;
+  const expire = statut === 'expire';
+  const texte = expire
+    ? 'Abonnement expiré : vos données sont en lecture seule.'
+    : statut === 'essai'
+      ? `Essai gratuit : ${joursRestants} jour${joursRestants > 1 ? 's' : ''} restant${joursRestants > 1 ? 's' : ''}.`
+      : `Votre abonnement se termine dans ${joursRestants} jour${joursRestants > 1 ? 's' : ''}.`;
+  return (
+    <Pressable
+      onPress={() => router.push('/abonnement')}
+      accessibilityRole="button"
+      style={({ pressed }) => [
+        {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+          padding: 14,
+          borderRadius: 14,
+          backgroundColor: expire ? c.dangerBg : c.warningBg,
+        },
+        pressed && { opacity: 0.8 },
+      ]}>
+      <Icon name={expire ? 'lock-closed-outline' : 'time-outline'} size={20} color={expire ? c.danger : c.warning} />
+      <T style={{ flex: 1, fontWeight: '600' }} color={expire ? c.danger : c.warning}>
+        {texte}
+      </T>
+      <T style={{ fontWeight: '800' }} color={expire ? c.danger : c.warning}>
+        {expire ? 'Renouveler' : 'Formules'}
+      </T>
+    </Pressable>
+  );
+}
 
 /** Carte « Pour commencer » tant que l'appli n'est pas configurée. */
 function Demarrage({ profil, logements, locataires }: { profil: boolean; logements: boolean; locataires: boolean }) {
@@ -211,6 +251,8 @@ export default function Accueil() {
             )}
           </Row>
         </Card>
+
+        <BandeauAbonnement />
 
         {demarrage && <Demarrage profil={!!proprio} logements={nbLogements > 0} locataires={aDesLocataires} />}
 

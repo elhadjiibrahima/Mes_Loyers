@@ -3,6 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { TextInput, View } from 'react-native';
 
+import { useAcces } from '@/auth/contexte';
 import { AddButton } from '@/components/add-menu';
 import { Avatar, Badge, Button, Card, Empty, Icon, IconButton, Row, Screen, T } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
@@ -22,6 +23,8 @@ export default function Locataires() {
   const c = useTheme();
   const [locataires, setLocataires] = useState<Ligne[]>([]);
   const [recherche, setRecherche] = useState('');
+  const acces = useAcces();
+  const ajouter = () => acces.peutModifier() && router.push('/locataire/nouveau');
 
   useFocusEffect(
     useCallback(() => {
@@ -42,7 +45,7 @@ export default function Locataires() {
       <Screen tabs fab>
         <Row style={{ marginTop: Spacing.four }}>
           <T variant="title">Locataires</T>
-          <IconButton icon="add" label="Ajouter un locataire" variant="primary" onPress={() => router.push('/locataire/nouveau')} />
+          <IconButton icon="add" label="Ajouter un locataire" variant="primary" onPress={ajouter} />
         </Row>
 
         {locataires.length === 0 ? (
@@ -50,7 +53,7 @@ export default function Locataires() {
             icon="people-outline"
             title="Aucun locataire"
             text="Ajoutez un locataire et associez-le à un logement."
-            action={<Button title="Ajouter un locataire" onPress={() => router.push('/locataire/nouveau')} />}
+            action={<Button title="Ajouter un locataire" onPress={ajouter} />}
           />
         ) : (
           <>

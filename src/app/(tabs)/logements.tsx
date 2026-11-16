@@ -3,6 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { Text, View } from 'react-native';
 
+import { useAcces } from '@/auth/contexte';
 import { AddButton } from '@/components/add-menu';
 import { Badge, Button, Card, Chips, Empty, Icon, IconButton, Row, Screen, T } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
@@ -27,6 +28,8 @@ export default function Logements() {
   const c = useTheme();
   const [logements, setLogements] = useState<Logement[]>([]);
   const [filtre, setFiltre] = useState<Filtre>('tous');
+  const acces = useAcces();
+  const ajouter = async () => (await acces.peutAjouterLogement()) && router.push('/logement/nouveau');
 
   useFocusEffect(
     useCallback(() => {
@@ -51,7 +54,7 @@ export default function Logements() {
       <Screen tabs fab>
         <Row style={{ marginTop: Spacing.four }}>
           <T variant="title">Logements</T>
-          <IconButton icon="add" label="Ajouter un logement" variant="primary" onPress={() => router.push('/logement/nouveau')} />
+          <IconButton icon="add" label="Ajouter un logement" variant="primary" onPress={ajouter} />
         </Row>
 
         {logements.length === 0 ? (
@@ -59,7 +62,7 @@ export default function Logements() {
             icon="business-outline"
             title="Aucun logement"
             text="Ajoutez vos appartements, chambres, magasins ou maisons."
-            action={<Button title="Ajouter un logement" onPress={() => router.push('/logement/nouveau')} />}
+            action={<Button title="Ajouter un logement" onPress={ajouter} />}
           />
         ) : (
           <>

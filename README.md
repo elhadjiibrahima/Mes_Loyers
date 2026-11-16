@@ -21,6 +21,15 @@ npx expo start --web    # version navigateur
 - **Bilan** : encaissements et dépenses par mois et par logement, bénéfice net, export PDF
 - **Profil** : nom imprimé sur les quittances, **sauvegarde / restauration** des données
 
+## Comptes et abonnement (phase de test)
+
+- **Connexion par e-mail et mot de passe** (`src/app/connexion.tsx`, `inscription.tsx`). Mots de passe hachés (PBKDF2-SHA256, sel aléatoire), jamais stockés en clair.
+- **Plusieurs propriétaires** : chaque compte a sa propre base SQLite (`loyers-<id>.db`) ; aucun ne voit les données d'un autre. Le premier compte créé sur l'appareil reprend les données déjà saisies.
+- **Abonnement** : 30 jours d'essai gratuit, puis une formule mensuelle selon le nombre de logements (`src/auth/formules.ts` : Particulier 1–2 logements, Essentiel, Pro, Agence). Abonnement expiré : données consultables, modifications bloquées.
+- **Paiement simulé** (`MODE_TEST_PAIEMENT = true`) : un bouton active le mois sans prélever d'argent.
+
+⚠️ Pendant cette phase, les comptes sont enregistrés **sur l'appareil** (`comptes.db`). Pour un vrai service (connexion depuis plusieurs téléphones, paiement Orange Money / MTN, mot de passe oublié par e-mail), `src/auth/comptes.ts` devra appeler un serveur ; les écrans ne changeront pas.
+
 ## Base de données (SQLite)
 
 Les données sont dans une base SQLite locale, `loyers.db`, ouverte par `expo-sqlite`
